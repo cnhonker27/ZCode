@@ -14,3 +14,8 @@ third-party/runtime/*.txt -text -whitespace
 docs/knip/docs/LICENSE -text -whitespace
 docs/knip/docs/licenses/** -text -whitespace
 third-party/inventory.json linguist-generated=true
+
+# Gen UI 运行时资源是带 sha256 清单的固定快照（vendor/manifest.json），
+# desktop 构建时逐字节校验哈希；autocrlf 的行尾转换会破坏校验，
+# 必须按原字节检出。
+apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/** -text
