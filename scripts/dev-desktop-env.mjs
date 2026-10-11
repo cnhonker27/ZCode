@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { isRealComputerUseProducerInstalled } from "../packages/desktop/scripts/computer-use-producer.mjs";
@@ -13,6 +14,25 @@ if (requestedEnv !== "test" && requestedEnv !== "production") {
   console.error("Usage: node scripts/dev-desktop-env.mjs <test|production> [--agent-bytecode]");
   process.exit(1);
 }
+
+// 数据根隔离必须与桌面 home 联动：
+// settingService（packages/services/src/setting/settingService.ts）的路径规则是
+// ZCODE_DESKTOP_HOME_DIR || HOME || USERPROFILE，不读 ZCODE_DATA_BASE_DIR；
+// 只设数据根时，setting.json 仍会读写真实 ~/.zcode/v2/setting.json，污染已安装实例。
+// 依据：E2E 隔离配方（packages/desktop/wdio.conf.ts）把 ZCODE_DATA_BASE_DIR 与
+// ZCODE_DESKTOP_HOME_DIR 指向同一目录；test 模式与 mise dev task（mise.toml）语义对齐，
+// 未显式指定数据根时默认 ~/.zcode-dev-home。production 模式不改变默认行为，
+// 仅在显式设置数据根时联动，且尊重已显式设置的 ZCODE_DESKTOP_HOME_DIR。
+const dataBaseDir =
+  process.env.ZCODE_DATA_BASE_DIR?.trim() ||
+  (requestedEnv === "test" ? join(homedir(), ".zcode-dev-home") : "");
+const desktopHomeDir = dataBaseDir
+  ? process.env.ZCODE_DESKTOP_HOME_DIR?.trim() || dataBaseDir
+  : "";
+const isolatedDevEnv = {
+  ...(dataBaseDir ? { ZCODE_DATA_BASE_DIR: dataBaseDir } : {}),
+  ...(desktopHomeDir ? { ZCODE_DESKTOP_HOME_DIR: desktopHomeDir } : {}),
+};
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -69,6 +89,7 @@ function run(command, args) {
       env: withPinnedNodePath(
         {
           ...process.env,
+          ...isolatedDevEnv,
           ZCODE_ENV: requestedEnv,
           ZCODE_DESKTOP_AGENT_BYTECODE: agentBytecode ? "1" : "0",
           ...computerUseDevEnv,
