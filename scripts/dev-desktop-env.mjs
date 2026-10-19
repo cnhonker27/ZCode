@@ -15,23 +15,31 @@ if (requestedEnv !== "test" && requestedEnv !== "production") {
   process.exit(1);
 }
 
-// 数据根隔离必须与桌面 home 联动：
-// settingService（packages/services/src/setting/settingService.ts）的路径规则是
-// ZCODE_DESKTOP_HOME_DIR || HOME || USERPROFILE，不读 ZCODE_DATA_BASE_DIR；
-// 只设数据根时，setting.json 仍会读写真实 ~/.zcode/v2/setting.json，污染已安装实例。
-// 依据：E2E 隔离配方（packages/desktop/wdio.conf.ts）把 ZCODE_DATA_BASE_DIR 与
-// ZCODE_DESKTOP_HOME_DIR 指向同一目录；test 模式与 mise dev task（mise.toml）语义对齐，
-// 未显式指定数据根时默认 ~/.zcode-dev-home。production 模式不改变默认行为，
-// 仅在显式设置数据根时联动，且尊重已显式设置的 ZCODE_DESKTOP_HOME_DIR。
+// 数据根隔离必须联动桌面设置与 CLI 存储：settingService 不读 ZCODE_DATA_BASE_DIR，
+// CLI 的 storage.dir 和 storage.sessionDbPath 也各有独立的 ~/.zcode 默认值。
+// 只设 Desktop 变量会让命令日志和 SQLite 仍写入正式实例目录；因此由启动器统一推导，
+// 保留显式路径覆盖。路径语义与验收规则见 docs/desktop/dev-data-isolation-spec.md。
 const dataBaseDir =
   process.env.ZCODE_DATA_BASE_DIR?.trim() ||
   (requestedEnv === "test" ? join(homedir(), ".zcode-dev-home") : "");
-const desktopHomeDir = dataBaseDir
-  ? process.env.ZCODE_DESKTOP_HOME_DIR?.trim() || dataBaseDir
+const desktopHomeDir = dataBaseDir ? process.env.ZCODE_DESKTOP_HOME_DIR?.trim() || dataBaseDir : "";
+const cliStorageDir = dataBaseDir
+  ? process.env.ZCODE_STORAGE_DIR?.trim() || join(dataBaseDir, ".zcode")
+  : "";
+const sessionDbPath = cliStorageDir
+  ? process.env.ZCODE_SESSION_DB_PATH?.trim() ||
+    process.env.ZCODE_SESSION_DB?.trim() ||
+    join(cliStorageDir, "cli", "db", "db.sqlite")
   : "";
 const isolatedDevEnv = {
   ...(dataBaseDir ? { ZCODE_DATA_BASE_DIR: dataBaseDir } : {}),
   ...(desktopHomeDir ? { ZCODE_DESKTOP_HOME_DIR: desktopHomeDir } : {}),
+  ...(cliStorageDir ? { ZCODE_STORAGE_DIR: cliStorageDir } : {}),
+  ...(sessionDbPath ? { ZCODE_SESSION_DB_PATH: sessionDbPath } : {}),
+  // CLI 兼容新旧数据库变量时按枚举顺序写配置；统一两者，防止旧别名覆盖最终路径。
+  ...(sessionDbPath && process.env.ZCODE_SESSION_DB !== undefined
+    ? { ZCODE_SESSION_DB: sessionDbPath }
+    : {}),
 };
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");

@@ -5,21 +5,21 @@
 
 ## 仓库与远程布局
 
-| 远程 | 地址 | 用途 |
-| --- | --- | --- |
-| `origin` | `https://github.com/zai-org/ZCode.git` | 社区上游，只读（fetch/pull 可用，push 会 403，误推无风险） |
-| `fork` | `https://github.com/cnhonker27/ZCode.git` | 本人 fork，推送个人分支 |
+| 远程     | 地址                                      | 用途                                                       |
+| -------- | ----------------------------------------- | ---------------------------------------------------------- |
+| `origin` | `https://github.com/zai-org/ZCode.git`    | 社区上游，只读（fetch/pull 可用，push 会 403，误推无风险） |
+| `fork`   | `https://github.com/cnhonker27/ZCode.git` | 本人 fork，推送个人分支                                    |
 
 长期分支：`fix/build-and-dev-isolation`（个人定制 + 通用修复）。
 
 ## 本地环境（Windows）
 
-| 组件 | 版本 / 来源 | 说明 |
-| --- | --- | --- |
-| Node | 24.14.0（`mise.toml` 钉住） | nvm-windows 镜像索引异常装不上，手动从 npmmirror CDN 下载 `node-v24.14.0-win-x64.zip` 解压到 `D:\SoftWare\nvm\v24.14.0` 后 `nvm use 24.14.0` |
-| pnpm | 10.33.2 | 与根 `package.json` 的 `packageManager` 一致；需在 Node 24.14.0 下重装（`npm i -g pnpm@10.33.2`），全局包跟着 Node 版本目录走 |
-| registry | `registry.npmmirror.com` | 本机访问不了 `registry.npmjs.org`，安装依赖统一走镜像 |
-| Electron 镜像 | `https://npmmirror.com/mirrors/electron/` | 与 `mise.toml` 的 `ELECTRON_MIRROR` 一致 |
+| 组件          | 版本 / 来源                               | 说明                                                                                                                                         |
+| ------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node          | 24.14.0（`mise.toml` 钉住）               | nvm-windows 镜像索引异常装不上，手动从 npmmirror CDN 下载 `node-v24.14.0-win-x64.zip` 解压到 `D:\SoftWare\nvm\v24.14.0` 后 `nvm use 24.14.0` |
+| pnpm          | 10.33.2                                   | 与根 `package.json` 的 `packageManager` 一致；需在 Node 24.14.0 下重装（`npm i -g pnpm@10.33.2`），全局包跟着 Node 版本目录走                |
+| registry      | `registry.npmmirror.com`                  | 本机访问不了 `registry.npmjs.org`，安装依赖统一走镜像                                                                                        |
+| Electron 镜像 | `https://npmmirror.com/mirrors/electron/` | 与 `mise.toml` 的 `ELECTRON_MIRROR` 一致                                                                                                     |
 
 安装依赖：
 
@@ -36,14 +36,28 @@ npm_config_registry=https://registry.npmmirror.com pnpm install
 
 ### 数据隔离
 
-`pnpm dev:desktop:test` 的 test 模式自动隔离：agent 数据根与设置文件全部落在
-`~/.zcode-dev-home`，已安装的 ZCode（`~/.zcode`）不受影响；Electron userData 本来就走独立的 `%APPDATA%/ZCode Dev`。
+`pnpm dev:desktop:test` 的 test 模式默认将 Desktop 数据、设置，以及 CLI 存储和会话数据库
+隔离到 `~/.zcode-dev-home`。Electron userData 走独立的 `%APPDATA%/ZCode Dev`。
+用户显式指定的路径覆盖仍然生效；普通 `pnpm dev:desktop` 使用 production 模式，不默认隔离。
 
-原理：`scripts/dev-desktop-env.mjs` 会把 `ZCODE_DATA_BASE_DIR` 与 `ZCODE_DESKTOP_HOME_DIR`
-联动指向同一目录。注意 `ZCODE_DATA_BASE_DIR` 只隔离 agent 数据根；
-settingService（`packages/services/src/setting/settingService.ts`）的路径规则是
-`ZCODE_DESKTOP_HOME_DIR || HOME || USERPROFILE`，不读 `ZCODE_DATA_BASE_DIR`，
-所以只设数据根时设置文件仍会写到真实 `~/.zcode`。
+`scripts/dev-desktop-env.mjs` 统一推导并向子进程传递：
+
+| 变量                                            | test 模式默认路径                           |
+| ----------------------------------------------- | ------------------------------------------- |
+| `ZCODE_DATA_BASE_DIR`、`ZCODE_DESKTOP_HOME_DIR` | `~/.zcode-dev-home`                         |
+| `ZCODE_STORAGE_DIR`                             | `~/.zcode-dev-home/.zcode`                  |
+| `ZCODE_SESSION_DB_PATH`                         | `~/.zcode-dev-home/.zcode/cli/db/db.sqlite` |
+
+Desktop 与 CLI 分别读取各自的路径配置，只设前两个变量时，CLI 日志与数据库仍会回落到真实
+`~/.zcode`。CLI 存储根与数据库也是独立配置，必须同时指定。规则和验收场景见
+[开发数据隔离 spec](desktop/dev-data-isolation-spec.md)。
+
+修改启动环境后，退出开发实例并重新运行 `dev-desktop-test.bat` 或 `pnpm dev:desktop:test`，
+使新建的 Host 和 Agent 继承配置。旧日志和数据库不会自动迁移或删除。回归检查：
+
+```bash
+node --test scripts/test/dev-desktop-env.test.mjs
+```
 
 ### 分支上的修复（尚未进上游）
 
