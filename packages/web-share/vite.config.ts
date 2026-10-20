@@ -24,6 +24,8 @@ const { version } = JSON.parse(readFileSync(resolve(REPO_ROOT, "package.json"), 
 // 根导入也会经由 node_modules 中的 workspace 链接按 exports 解析到同一目标）；
 // 子路径按 packages/shared/package.json 的 exports 逐项显式指向源码，
 // 与下方 @zcode/ui 子路径别名的既有做法一致。
+// 注意 exports 的 key 形如 "./test-ids"，拼接前必须去掉前导 "./"，
+// 否则生成 "@zcode/shared./test-ids"，与真实导入说明符永远不匹配（等于没有别名）。
 const sharedPackageJson = JSON.parse(
   readFileSync(resolve(REPO_ROOT, "packages/shared/package.json"), "utf8"),
 ) as { exports: Record<string, string> };
@@ -31,7 +33,7 @@ const sharedAliases = [
   ...Object.entries(sharedPackageJson.exports)
     .filter(([key]) => key !== ".")
     .map(([key, target]) => ({
-      find: `@zcode/shared${key}`,
+      find: `@zcode/shared${key.replace(/^\./, "")}`,
       replacement: resolve(REPO_ROOT, "packages/shared", target),
     })),
   {
@@ -68,10 +70,10 @@ export default defineConfig(({ mode }) => {
           find: "@zcode/ui/useTheme",
           replacement: resolve(REPO_ROOT, "packages/ui/src/useTheme.ts"),
         },
-        // 以下两条与 sharedAliases 的上游子路径意图重叠，但当前 sharedAliases 由 exports 的
-        // "./x" key 直接拼接，生成的 find 值是 "@zcode/shared./x"，匹配不到真实导入；
-        // 在 sharedAliases 修正前必须显式登记，否则镜像构建时这两条子路径解析失败。
-        // 只读时间线的协议子路径同时是 shareBuildBoundary 守卫的准入声明。
+        // 以下两条原本是显式登记（历史上 sharedAliases 生成的 find 值带 "./" 前缀、匹配不到导入）。
+        // 该缺陷已修复，这两条现在由 sharedAliases 先命中，属于冗余兜底；
+        // 保留以维持合并后的既有行为，待 share 构建验证后单独清理。
+        // 只读时间线的协议子路径同时是 share 闭包校验关注的入口。
         {
           find: "@zcode/shared/zcode-protocol-v4",
           replacement: resolve(REPO_ROOT, "packages/shared/src/zcode-protocol-v4/index.ts"),
