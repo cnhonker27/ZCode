@@ -45,6 +45,9 @@ packages/stream-animate/.stream-animate-data/
 .claude/worktrees/
 .codegraph
 .mimosa/
+# WorkBuddy 的本机工作数据目录（会话记忆、临时产物），不属于仓库源码；
+# 未忽略时它会以未跟踪文件的形式存在，pre-push 钩子据此判定工作区不干净而直接拒绝推送。
+.workbuddy/
 # 2026-08-20：集成分支曾混入 node-gyp 构建产物与 .playwright-mcp 临时快照；
 # 入库由 scripts/ci/ci-repo-hygiene.mjs 在 CI 第一站拒绝，这里让本地 git add 也忽略它们。
 .playwright-mcp/
