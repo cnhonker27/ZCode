@@ -59,12 +59,28 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: [
+        // @zcode/shared 的根入口与子路径别名统一由上方 sharedAliases 生成
+        // （含 /^@zcode\/shared$/ 精确匹配，等价于上游手写的根条目）。
         ...sharedAliases,
         { find: "@", replacement: resolve(REPO_ROOT, "packages/ui/src") },
         // Share 镜像不安装 @zcode/ui（它会带入 services/rpc 闭包），子路径导入必须显式指向源码。
         {
           find: "@zcode/ui/useTheme",
           replacement: resolve(REPO_ROOT, "packages/ui/src/useTheme.ts"),
+        },
+        // 以下两条与 sharedAliases 的上游子路径意图重叠，但当前 sharedAliases 由 exports 的
+        // "./x" key 直接拼接，生成的 find 值是 "@zcode/shared./x"，匹配不到真实导入；
+        // 在 sharedAliases 修正前必须显式登记，否则镜像构建时这两条子路径解析失败。
+        // 只读时间线的协议子路径同时是 shareBuildBoundary 守卫的准入声明。
+        {
+          find: "@zcode/shared/zcode-protocol-v4",
+          replacement: resolve(REPO_ROOT, "packages/shared/src/zcode-protocol-v4/index.ts"),
+        },
+        // Bugfix：test-ids 改为只从子路径导入后，reasoning.tsx、ToolSummaryRow.tsx 等 share 闭包
+        // 文件引用了它；镜像没有 packages/ui 的依赖链接，未登记别名时 Docker 构建解析失败。
+        {
+          find: "@zcode/shared/test-ids",
+          replacement: resolve(REPO_ROOT, "packages/shared/src/test-ids.ts"),
         },
         {
           find: "@zcode/ui/conversation-share-readonly",
